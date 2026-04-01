@@ -726,7 +726,7 @@ class Client final : public WebhookActor::Callback {
       object_ptr<td_api::inputSuggestedPostInfo> &&input_suggested_post_info,
       object_ptr<td_api::MessageSchedulingState> &&scheduling_state);
 
-  static td::Result<td::vector<object_ptr<td_api::formattedText>>> get_poll_options(const Query *query);
+  static td::Result<td::vector<object_ptr<td_api::inputPollOption>>> get_input_poll_options(const Query *query);
 
   static td::Result<object_ptr<td_api::ReactionType>> get_reaction_type(td::JsonValue &&value);
 
