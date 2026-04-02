@@ -312,6 +312,7 @@ bool Client::init_methods() {
   methods_.emplace("answerwebappquery", &Client::process_answer_web_app_query_query);
   methods_.emplace("answerinlinequery", &Client::process_answer_inline_query_query);
   methods_.emplace("savepreparedinlinemessage", &Client::process_save_prepared_inline_message_query);
+  methods_.emplace("savepreparedkeyboardbutton", &Client::process_save_prepared_keyboard_button_query);
   methods_.emplace("answercallbackquery", &Client::process_answer_callback_query_query);
   methods_.emplace("answershippingquery", &Client::process_answer_shipping_query_query);
   methods_.emplace("answerprecheckoutquery", &Client::process_answer_pre_checkout_query_query);
@@ -6109,6 +6110,19 @@ class Client::JsonPreparedInlineMessageId final : public td::Jsonable {
   const td_api::preparedInlineMessageId *message_;
 };
 
+class Client::JsonPreparedKeyboardButton final : public td::Jsonable {
+ public:
+  explicit JsonPreparedKeyboardButton(const td_api::text *button) : button_(button) {
+  }
+  void store(td::JsonValueScope *scope) const {
+    auto object = scope->enter_object();
+    object("id", button_->text_);
+  }
+
+ private:
+  const td_api::text *button_;
+};
+
 // start custom Json objects impl
 
 class Client::JsonAuthorizationState : public td::Jsonable {
@@ -8004,6 +8018,25 @@ class Client::TdOnSavePreparedInlineMessageCallback final : public TdQueryCallba
     CHECK(result->get_id() == td_api::preparedInlineMessageId::ID);
     auto message = move_object_as<td_api::preparedInlineMessageId>(result);
     answer_query(JsonPreparedInlineMessageId(message.get()), std::move(query_));
+  }
+
+ private:
+  PromisedQueryPtr query_;
+};
+
+class Client::TdOnSavePreparedKeyboardButtonCallback final : public TdQueryCallback {
+ public:
+  explicit TdOnSavePreparedKeyboardButtonCallback(PromisedQueryPtr query) : query_(std::move(query)) {
+  }
+
+  void on_result(object_ptr<td_api::Object> result) final {
+    if (result->get_id() == td_api::error::ID) {
+      return fail_query_with_error(std::move(query_), move_object_as<td_api::error>(result));
+    }
+
+    CHECK(result->get_id() == td_api::text::ID);
+    auto text = move_object_as<td_api::text>(result);
+    answer_query(JsonPreparedKeyboardButton(text.get()), std::move(query_));
   }
 
  private:
@@ -14838,6 +14871,23 @@ td::Status Client::process_save_prepared_inline_message_query(PromisedQueryPtr &
         send_request(make_object<td_api::savePreparedInlineMessage>(user_id, std::move(results[0]), std::move(types)),
                      td::make_unique<TdOnSavePreparedInlineMessageCallback>(std::move(query)));
       });
+  return td::Status::OK();
+}
+
+td::Status Client::process_save_prepared_keyboard_button_query(PromisedQueryPtr &query) {
+  TRY_RESULT(user_id, get_user_id(query.get()));
+  auto r_value = json_decode(query->arg("button"));
+  if (r_value.is_error()) {
+    return td::Status::Error(400, "Can't parse keyboard button JSON object");
+  }
+  auto value = r_value.move_as_ok();
+  auto r_button = get_keyboard_button(value);
+  if (r_button.is_error()) {
+    return td::Status::Error(400, PSLICE() << "Can't parse keyboard button: " << r_button.error().message());
+  }
+
+  send_request(make_object<td_api::savePreparedKeyboardButton>(user_id, r_button.move_as_ok()),
+               td::make_unique<TdOnSavePreparedKeyboardButtonCallback>(std::move(query)));
   return td::Status::OK();
 }
 
