@@ -2384,7 +2384,8 @@ class Client::JsonPollOption final : public td::Jsonable {
 
 class Client::JsonPoll final : public td::Jsonable {
  public:
-  JsonPoll(const td_api::poll *poll, const Client *client) : poll_(poll), client_(client) {
+  JsonPoll(const td_api::poll *poll, const td_api::formattedText *description, const Client *client)
+      : poll_(poll), description_(description), client_(client) {
   }
   void store(td::JsonValueScope *scope) const {
     auto object = scope->enter_object();
@@ -2429,10 +2430,17 @@ class Client::JsonPoll final : public td::Jsonable {
       default:
         UNREACHABLE();
     }
+    if (description_ != nullptr && !description_->text_.empty()) {
+      object("description", description_->text_);
+      if (!description_->entities_.empty()) {
+        object("description_entities", JsonVectorEntities(description_->entities_, client_));
+      }
+    }
   }
 
  private:
   const td_api::poll *poll_;
+  const td_api::formattedText *description_;
   const Client *client_;
 };
 
@@ -3955,7 +3963,7 @@ class Client::JsonExternalReplyInfo final : public td::Jsonable {
         }
         case td_api::messagePoll::ID: {
           auto content = static_cast<const td_api::messagePoll *>(reply_->content_.get());
-          object("poll", JsonPoll(content->poll_.get(), client_));
+          object("poll", JsonPoll(content->poll_.get(), content->description_.get(), client_));
           break;
         }
         case td_api::messageUnsupported::ID:
@@ -4244,7 +4252,7 @@ void Client::JsonMessage::store(td::JsonValueScope *scope) const {
     }
     case td_api::messagePoll::ID: {
       auto content = static_cast<const td_api::messagePoll *>(message_->content.get());
-      object("poll", JsonPoll(content->poll_.get(), client_));
+      object("poll", JsonPoll(content->poll_.get(), content->description_.get(), client_));
       break;
     }
     case td_api::messageChatAddMembers::ID: {
@@ -6566,7 +6574,7 @@ class Client::TdOnStopPollCallback final : public TdQueryCallback {
       return fail_query_with_error(std::move(query_), 400, "message poll not found");
     }
     auto message_poll = static_cast<const td_api::messagePoll *>(message_info->content.get());
-    answer_query(JsonPoll(message_poll->poll_.get(), client_), std::move(query_));
+    answer_query(JsonPoll(message_poll->poll_.get(), message_poll->description_.get(), client_), std::move(query_));
   }
 
  private:
@@ -6595,7 +6603,7 @@ class Client::TdOnStopBusinessPollCallback final : public TdQueryCallback {
       return fail_query_with_error(std::move(query_), 400, "message poll not found");
     }
     auto message_poll = static_cast<const td_api::messagePoll *>(message->content.get());
-    answer_query(JsonPoll(message_poll->poll_.get(), client_), std::move(query_));
+    answer_query(JsonPoll(message_poll->poll_.get(), message_poll->description_.get(), client_), std::move(query_));
   }
 
  private:
@@ -17839,7 +17847,7 @@ void Client::add_new_message(object_ptr<td_api::message> &&message, bool is_edit
 
 void Client::add_update_poll(object_ptr<td_api::updatePoll> &&update) {
   CHECK(update != nullptr);
-  add_update(UpdateType::Poll, JsonPoll(update->poll_.get(), this), 86400, update->poll_->id_);
+  add_update(UpdateType::Poll, JsonPoll(update->poll_.get(), nullptr, this), 86400, update->poll_->id_);
 }
 
 void Client::add_update_poll_answer(object_ptr<td_api::updatePollAnswer> &&update) {
