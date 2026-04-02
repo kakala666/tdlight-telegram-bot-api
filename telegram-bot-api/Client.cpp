@@ -2373,6 +2373,7 @@ class Client::JsonPollOption final : public td::Jsonable {
         default:
           UNREACHABLE();
       }
+      object("addition_date", option_->addition_date_);
     }
   }
 
