@@ -150,6 +150,7 @@ class Client final : public WebhookActor::Callback {
   class JsonPoll;
   class JsonPollAnswer;
   class JsonPollOptionAdded;
+  class JsonPollOptionDeleted;
   class JsonChecklistTask;
   class JsonChecklist;
   class JsonChecklistTasksDone;
