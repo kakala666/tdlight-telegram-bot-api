@@ -18296,7 +18296,7 @@ td::int64 Client::choose_added_member_id(const td_api::messageChatAddMembers *me
   return message_add_members->member_user_ids_[0];
 }
 
-bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::message> &message, bool is_edited) const {
+bool Client::need_skip_update_message(int64 chat_id, const MessageInfo *message_info, bool is_edited) const {
   const ChatInfo *chat;
   ChatInfo::Type chat_type;
   if (chat_id != 0) {
@@ -18307,8 +18307,9 @@ bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::me
     chat = nullptr;
     chat_type = ChatInfo::Type::Private;
   }
-  if (message->is_outgoing_ && chat_id != 0) {
-    switch (message->content_->get_id()) {
+  auto message_content_id = message_info->content->get_id();
+  if (message_info->is_outgoing && chat_id != 0) {
+    switch (message_content_id) {
       case td_api::messageChatChangeTitle::ID:
       case td_api::messageChatChangePhoto::ID:
       case td_api::messageChatDeletePhoto::ID:
@@ -18343,7 +18344,7 @@ bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::me
     }
   }
 
-  int32 message_date = message->edit_date_ == 0 ? message->date_ : message->edit_date_;
+  int32 message_date = message_info->edit_date == 0 ? message_info->date : message_info->edit_date;
   if (message_date <= get_unix_time() - 86400) {
     // don't send messages received/edited more than 1 day ago
     LOG(DEBUG) << "Skip update about message with date " << message_date << ", because current date is "
@@ -18357,8 +18358,8 @@ bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::me
     if (supergroup_info->status->get_id() == td_api::chatMemberStatusLeft::ID ||
         supergroup_info->status->get_id() == td_api::chatMemberStatusBanned::ID) {
       // if we have left the chat, send only update about leaving the supergroup
-      if (message->content_->get_id() == td_api::messageChatDeleteMember::ID) {
-        auto user_id = static_cast<const td_api::messageChatDeleteMember *>(message->content_.get())->user_id_;
+      if (message_content_id == td_api::messageChatDeleteMember::ID) {
+        auto user_id = static_cast<const td_api::messageChatDeleteMember *>(message_info->content.get())->user_id_;
         return user_id != my_id_;
       }
       return true;
@@ -18369,23 +18370,23 @@ bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::me
       return true;
     }
 
-    if (!supergroup_info->is_supergroup && message->content_->get_id() == td_api::messageSupergroupChatCreate::ID) {
+    if (!supergroup_info->is_supergroup && message_content_id == td_api::messageSupergroupChatCreate::ID) {
       // don't send message about channel creation, even if the bot was added at exactly the same time
       return true;
     }
   }
 
-  if (message->self_destruct_type_ != nullptr) {
+  if (message_info->is_self_destruct) {
     return true;
   }
 
-  if (message->import_info_ != nullptr) {
+  if (message_info->is_imported) {
     return true;
   }
 
-  switch (message->content_->get_id()) {
+  switch (message_content_id) {
     case td_api::messageChatAddMembers::ID: {
-      auto content = static_cast<const td_api::messageChatAddMembers *>(message->content_.get());
+      auto content = static_cast<const td_api::messageChatAddMembers *>(message_info->content.get());
       if (content->member_user_ids_.empty()) {
         LOG(ERROR) << "Receive empty messageChatAddMembers";
         return true;
@@ -18400,7 +18401,7 @@ bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::me
       break;
     }
     case td_api::messagePinMessage::ID: {
-      auto content = static_cast<const td_api::messagePinMessage *>(message->content_.get());
+      auto content = static_cast<const td_api::messagePinMessage *>(message_info->content.get());
       auto pinned_message_id = content->message_id_;
       if (pinned_message_id <= 0) {
         return true;
@@ -18408,7 +18409,7 @@ bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::me
       break;
     }
     case td_api::messageProximityAlertTriggered::ID: {
-      auto content = static_cast<const td_api::messageProximityAlertTriggered *>(message->content_.get());
+      auto content = static_cast<const td_api::messageProximityAlertTriggered *>(message_info->content.get());
       return content->traveler_id_->get_id() != td_api::messageSenderUser::ID ||
              content->watcher_id_->get_id() != td_api::messageSenderUser::ID;
     }
@@ -18444,7 +18445,7 @@ bool Client::need_skip_update_message(int64 chat_id, const object_ptr<td_api::me
   }
 
   if (is_edited && chat_id != 0) {
-    const MessageInfo *old_message = get_message(chat_id, message->id_, true);
+    const MessageInfo *old_message = get_message(chat_id, message_info->id, true);
     if (old_message != nullptr && !old_message->is_content_changed) {
       return true;
     }
@@ -18858,8 +18859,8 @@ void Client::process_new_message_queue(int64 chat_id, int state) {
     auto is_edited = queue.queue_.front().is_edited;
     queue.queue_.pop();
     state = 0;
-    if (need_skip_update_message(chat_id, message, is_edited)) {
-      add_message(std::move(message));
+    const auto *message_info = add_message(std::move(message));
+    if (need_skip_update_message(chat_id, message_info, is_edited)) {
       continue;
     }
 
@@ -18875,7 +18876,7 @@ void Client::process_new_message_queue(int64 chat_id, int state) {
       update_type = is_edited ? UpdateType::EditedMessage : UpdateType::Message;
     }
 
-    int32 message_date = message->edit_date_ == 0 ? message->date_ : message->edit_date_;
+    int32 message_date = message_info->edit_date == 0 ? message_info->date : message_info->edit_date;
     if (delayed_update_count_ > 0 && (update_type != delayed_update_type_ || chat_id != delayed_chat_id_)) {
       if (delayed_update_count_ == 1) {
         LOG(ERROR) << "Receive very old update " << get_update_type_name(delayed_update_type_) << " sent at "
@@ -18908,7 +18909,6 @@ void Client::process_new_message_queue(int64 chat_id, int state) {
       delayed_update_count_++;
     }
     auto left_time = message_date + 86400 - now;
-    const auto *message_info = add_message(std::move(message));
 
     message_info->is_content_changed = false;
     add_update(update_type, JsonMessage(message_info, true, get_update_type_name(update_type).str(), this), left_time,
@@ -18949,19 +18949,19 @@ void Client::process_new_business_message_queue(const td::string &connection_id)
       }
     }
 
-    auto message = std::move(message_ref);
+    auto message_info = create_business_message(connection_id, std::move(message_ref));
     auto is_edited = queue.queue_.front().is_edited_;
     queue.queue_.pop();
-    if (need_skip_update_message(0, message->message_, is_edited)) {
+
+    if (need_skip_update_message(0, message_info.get(), is_edited)) {
       continue;
     }
 
-    auto message_date = message->message_->edit_date_ == 0 ? message->message_->date_ : message->message_->edit_date_;
+    auto message_date = message_info->edit_date == 0 ? message_info->date : message_info->edit_date;
     auto now = get_unix_time();
     auto left_time = message_date + 86400 - now;
-    auto webhook_queue_id = message->message_->chat_id_ + (static_cast<int64>(11) << 33);
+    auto webhook_queue_id = message_info->chat_id + (static_cast<int64>(11) << 33);
     auto update_type = is_edited ? UpdateType::EditedBusinessMessage : UpdateType::BusinessMessage;
-    auto message_info = create_business_message(connection_id, std::move(message));
     add_update(update_type, JsonMessage(message_info.get(), true, get_update_type_name(update_type).str(), this),
                left_time, webhook_queue_id);
   }
@@ -19094,6 +19094,9 @@ void Client::init_message(MessageInfo *message_info, object_ptr<td_api::message>
   message_info->paid_message_star_count = message->paid_message_star_count_;
   message_info->effect_id = message->effect_id_;
   message_info->is_paid_post = message->is_paid_star_suggested_post_ || message->is_paid_ton_suggested_post_;
+  message_info->is_outgoing = message->is_outgoing_;
+  message_info->is_self_destruct = message->self_destruct_type_ != nullptr;
+  message_info->is_imported = message->import_info_ != nullptr;
 
   drop_internal_reply_to_message_in_another_chat(message);
 
