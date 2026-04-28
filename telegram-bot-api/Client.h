@@ -262,7 +262,7 @@ class Client final : public WebhookActor::Callback {
   class JsonUpdateTypes;
   class JsonWebhookInfo;
   class JsonStickerSet;
-  class JsonSentWebAppMessage;
+  class JsonInlineMessageId;
   class JsonPreparedInlineMessageId;
   class JsonPreparedKeyboardButton;
   class JsonCustomJson;
