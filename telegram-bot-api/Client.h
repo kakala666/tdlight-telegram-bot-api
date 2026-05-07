@@ -1009,6 +1009,7 @@ class Client final : public WebhookActor::Callback {
   td::Status process_add_chat_member_query(PromisedQueryPtr &query);
   td::Status process_report_chat_query(PromisedQueryPtr &query);
   td::Status process_create_chat_query(PromisedQueryPtr &query);
+  td::Status process_upgrade_basic_group_chat_query(PromisedQueryPtr &query);
   td::Status process_search_messages_query(PromisedQueryPtr &query);
   td::Status process_search_chat_messages_query(PromisedQueryPtr &query);
   td::Status process_get_callback_query_answer_query(PromisedQueryPtr &query);
