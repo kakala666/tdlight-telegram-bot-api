@@ -168,6 +168,7 @@ class Client final : public WebhookActor::Callback {
   class JsonEntity;
   class JsonVectorEntities;
   class JsonRichText;
+  class JsonRichTableCell;
   class JsonRichBlockCaption;
   class JsonWebAppInfo;
   class JsonCopyTextButton;
