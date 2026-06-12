@@ -431,8 +431,6 @@ bool Client::init_methods() {
   methods_.emplace("addchatmembers", &Client::process_add_chat_member_query);
   methods_.emplace("reportchat", &Client::process_report_chat_query);
   methods_.emplace("createchat", &Client::process_create_chat_query);
-  methods_.emplace("upgradebasicgroupchat", &Client::process_upgrade_basic_group_chat_query);
-  methods_.emplace("upgradebasicgroupchattosupergroupchat", &Client::process_upgrade_basic_group_chat_query);
   methods_.emplace("searchmessages", &Client::process_search_messages_query);
   methods_.emplace("searchchatmessages", &Client::process_search_chat_messages_query);
   methods_.emplace("getcallbackqueryanswer", &Client::process_get_callback_query_answer_query);
@@ -16714,23 +16712,6 @@ td::Status Client::process_create_chat_query(PromisedQueryPtr &query) {
   } else {
     return td::Status::Error(400, "Chat type is not specified");
   }
-  return td::Status::OK();
-}
-
-td::Status Client::process_upgrade_basic_group_chat_query(PromisedQueryPtr &query) {
-  CHECK_IS_USER();
-  auto chat_id = query->arg("chat_id");
-
-  check_chat(chat_id, AccessRights::Edit, std::move(query),
-             [this](int64 chat_id, PromisedQueryPtr query) {
-               auto chat_info = get_chat(chat_id);
-               CHECK(chat_info != nullptr);
-               if (chat_info->type != ChatInfo::Type::Group) {
-                 return fail_query(400, "Bad Request: chat is not a basic group", std::move(query));
-               }
-               send_request(make_object<td_api::upgradeBasicGroupChatToSupergroupChat>(chat_id),
-                            td::make_unique<TdOnReturnChatCallback>(this, std::move(query)));
-             });
   return td::Status::OK();
 }
 
