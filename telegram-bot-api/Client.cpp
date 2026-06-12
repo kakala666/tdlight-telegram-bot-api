@@ -6871,8 +6871,7 @@ class Client::JsonMessagesArray : public td::Jsonable {
   void store(td::JsonValueScope *scope) const {
     auto array = scope->enter_array();
     for (auto &message : messages_) {
-      auto full_message_id = client_->add_message(std::move(message));
-      const MessageInfo *m = client_->get_message(full_message_id.chat_id, full_message_id.message_id, true);
+      const MessageInfo *m = client_->add_message(std::move(message));
       array << JsonMessage(m, true, "search", client_);
     }
   }
@@ -17507,7 +17506,7 @@ td::Status Client::process_add_proxy_query(PromisedQueryPtr &query) {
 
   td_api::object_ptr<td_api::proxy> proxy = make_object<td_api::proxy>(server.str(), port, std::move(type));
 
-  send_request(make_object<td_api::addProxy>(std::move(proxy), false),
+  send_request(make_object<td_api::addProxy>(std::move(proxy), false, ""),
                td::make_unique<TdOnAddProxyQueryCallback>(std::move(query)));
   return td::Status::OK();
 }
@@ -17616,7 +17615,7 @@ td::Status Client::process_search_public_chats_query(PromisedQueryPtr &query) {
   CHECK_IS_USER();
   auto query_ = query->arg("query");
 
-  send_request(make_object<td_api::searchPublicChats>(query_.str()),
+  send_request(make_object<td_api::searchPublicChats>(query_.str(), nullptr),
                td::make_unique<TdOnGetChatsCallback>(this, std::move(query)));
   return td::Status::OK();
 }
